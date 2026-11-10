@@ -8,9 +8,9 @@ function getYoutubeApi() {
     if (window.YT?.Player) return resolve(window.YT);
     const old = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => { old?.(); resolve(window.YT); };
-    if (!document.querySelector('script[data-quadview-youtube]')) {
+    if (!document.querySelector('script[data-tessaview-youtube]')) {
       const script = document.createElement('script');
-      script.dataset.quadviewYoutube = 'true';
+      script.dataset.tessaviewYoutube = 'true';
       script.src = 'https://www.youtube.com/iframe_api';
       script.onerror = () => reject(new Error('YouTube player could not load'));
       document.head.appendChild(script);
@@ -146,7 +146,7 @@ export default function VideoPanel({ panelId, playback }) {
     <div className="video-stage">
       {current?.platform === 'youtube' && <div className="youtube-mount" ref={playerMount} />}
       {['twitch', 'twitch-vod'].includes(current?.platform) && <div className="twitch-mount" ref={twitchMount} />}
-      {!current && <div className="empty-state"><strong>QuadView</strong><span>Paste a YouTube or Twitch URL to begin</span></div>}
+      {!current && <div className="empty-state"><strong>TessaView</strong><span>Paste a YouTube or Twitch URL to begin</span></div>}
     </div>
     <div className="panel-controls">
       <div className="panel-input-row">
