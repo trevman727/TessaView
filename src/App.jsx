@@ -10,6 +10,7 @@ export default function App() {
   const [layout, setLayout] = useState(() => OPTIONS[read('quadview-layout','2×2')] ? read('quadview-layout','2×2') : '2×2');
   const [sizes, setSizes] = useState(() => read('quadview-sizes', {}));
   const [toolbarOpen, setToolbarOpen] = useState(true);
+  const [playback, setPlayback] = useState({ paused: false, sequence: 0 });
   const grid = useRef(null);
   const drag = useRef(null);
   const [rows, cols] = OPTIONS[layout];
@@ -41,10 +42,10 @@ export default function App() {
   return <main className="app-shell">
     <div className="global-controls">
       <button className="toolbar-toggle" onClick={() => setToolbarOpen(v => !v)} aria-expanded={toolbarOpen} title="Show or hide layout controls">▦</button>
-      {toolbarOpen && <div className="toolbar-content"><span className="brand">QuadView <small>2.0 preview</small></span><label>Layout <select value={layout} onChange={e => setLayout(e.target.value)}>{Object.keys(OPTIONS).map(k => <option key={k}>{k}</option>)}</select></label><button onClick={() => setSizes(prev => ({ ...prev, [layout]: {} }))}>Equalize</button><button onClick={() => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); }}>Fullscreen</button></div>}
+      {toolbarOpen && <div className="toolbar-content"><span className="brand">QuadView <small>2.0 preview</small></span><label>Layout <select value={layout} onChange={e => setLayout(e.target.value)}>{Object.keys(OPTIONS).map(k => <option key={k}>{k}</option>)}</select></label><button onClick={() => setPlayback(prev => ({ paused: !prev.paused, sequence: prev.sequence + 1 }))} aria-label={playback.paused ? "Play all videos" : "Pause all videos"} title={playback.paused ? "Play all videos" : "Pause all videos"}>{playback.paused ? "▶ Play All" : "⏸ Pause All"}</button><button onClick={() => setSizes(prev => ({ ...prev, [layout]: {} }))}>Equalize</button><button onClick={() => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.(); }}>Fullscreen</button></div>}
     </div>
     <div className="video-grid" ref={grid} style={{ gridTemplateColumns: widths.map(n => `${n}fr`).join(' '), gridTemplateRows: heights.map(n => `${n}fr`).join(' ') }}>
-      {Array.from({length: rows*cols}, (_,i) => <VideoPanel key={`panel-${i+1}`} panelId={`panel-${i+1}`} />)}
+      {Array.from({length: rows*cols}, (_,i) => <VideoPanel key={`panel-${i+1}`} panelId={`panel-${i+1}`} playback={playback} />)}
       {Array.from({length: cols-1}, (_,i) => <div key={`col-${i}`} className="resize-handle vertical" role="separator" aria-label={`Resize column ${i+1}`} onPointerDown={e => beginDrag(e,'cols',i)} style={{left: `${widths.slice(0,i+1).reduce((a,b)=>a+b,0)}%`}} />)}
       {Array.from({length: rows-1}, (_,i) => <div key={`row-${i}`} className="resize-handle horizontal" role="separator" aria-label={`Resize row ${i+1}`} onPointerDown={e => beginDrag(e,'rows',i)} style={{top: `${heights.slice(0,i+1).reduce((a,b)=>a+b,0)}%`}} />)}
     </div>

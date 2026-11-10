@@ -19,7 +19,21 @@ function getYoutubeApi() {
   return youtubeApi;
 }
 
-export default function VideoPanel({ panelId }) {
+let twitchApi;
+function getTwitchApi() {
+  if (twitchApi) return twitchApi;
+  twitchApi = new Promise((resolve, reject) => {
+    if (window.Twitch?.Player) return resolve(window.Twitch);
+    const script = document.createElement('script');
+    script.src = 'https://player.twitch.tv/js/embed/v1.js';
+    script.onload = () => window.Twitch?.Player ? resolve(window.Twitch) : reject(new Error('Twitch API unavailable'));
+    script.onerror = () => reject(new Error('Twitch player could not load'));
+    document.head.appendChild(script);
+  }).catch(error => { twitchApi = null; throw error; });
+  return twitchApi;
+}
+
+export default function VideoPanel({ panelId, playback }) {
   const [queue, setQueue] = useState(() => {
     try { return (JSON.parse(localStorage.getItem(`playlist-${panelId}`)) || []).map(normalizeEntry).filter(Boolean); }
     catch { return []; }
@@ -30,6 +44,10 @@ export default function VideoPanel({ panelId }) {
   const [error, setError] = useState('');
   const playerMount = useRef(null);
   const player = useRef(null);
+  const twitchMount = useRef(null);
+  const twitchPlayer = useRef(null);
+  const playbackRef = useRef(playback);
+  playbackRef.current = playback;
   const current = queue[index];
   const currentKey = current ? `${current.platform}:${current.id}` : '';
 
@@ -47,6 +65,7 @@ export default function VideoPanel({ panelId }) {
         playerVars: { autoplay: 1, rel: 0, playsinline: 1 },
         events: {
           onReady: ev => {
+            if (playbackRef.current.paused) ev.target.pauseVideo();
             const saved = Number(localStorage.getItem(`video-time-${panelId}-${current.id}`));
             if (saved > 0) ev.target.seekTo(saved, true);
             ticker = window.setInterval(() => {
@@ -71,6 +90,47 @@ export default function VideoPanel({ panelId }) {
     return () => { disposed = true; clearInterval(ticker); try { player.current?.destroy(); } catch { /* noop */ } player.current = null; if (playerMount.current?.contains(node)) playerMount.current.replaceChildren(); };
   }, [currentKey, panelId, index]);
 
+  useEffect(() => {
+    if (!current || !['twitch', 'twitch-vod'].includes(current.platform) || !twitchMount.current) return;
+    let disposed = false;
+    const node = document.createElement('div');
+    twitchMount.current.replaceChildren(node);
+    getTwitchApi().then(Twitch => {
+      if (disposed) return;
+      const options = { width: '100%', height: '100%', autoplay: false, parent: [window.location.hostname] };
+      if (current.platform === 'twitch') options.channel = current.id;
+      else options.video = `v${current.id}`;
+      const instance = new Twitch.Player(node, options);
+      twitchPlayer.current = instance;
+      instance.addEventListener(Twitch.Player.READY, () => {
+        if (disposed) return;
+        // Twitch starts paused by default. A prior Play All command should also apply
+        // if the embed was still loading when the command was issued.
+        if (playbackRef.current.sequence > 0 && !playbackRef.current.paused) {
+          try { instance.play(); } catch { /* playback may be blocked */ }
+        }
+      });
+    }).catch(() => { if (!disposed) setError('Unable to load Twitch player.'); });
+    return () => {
+      disposed = true;
+      try { twitchPlayer.current?.pause(); } catch { /* noop */ }
+      twitchPlayer.current = null;
+      if (twitchMount.current?.contains(node)) twitchMount.current.replaceChildren();
+    };
+  }, [currentKey]);
+
+  useEffect(() => {
+    if (!playback.sequence) return;
+    try {
+      if (playback.paused) player.current?.pauseVideo();
+      else player.current?.playVideo();
+    } catch { /* player may not be ready */ }
+    try {
+      if (playback.paused) twitchPlayer.current?.pause();
+      else twitchPlayer.current?.play();
+    } catch { /* player may not be ready or playback blocked */ }
+  }, [playback]);
+
   function add() {
     const parsed = parseVideoUrl(input);
     if (!parsed) { setError('Paste a supported YouTube or Twitch video/channel URL.'); return; }
@@ -82,11 +142,10 @@ export default function VideoPanel({ panelId }) {
     setQueue(prev => prev.filter((_, j) => j !== i));
     setIndex(prev => i < prev ? prev - 1 : i === prev ? Math.min(prev, Math.max(0, queue.length - 2)) : prev);
   }
-  const twitchSrc = current?.platform === 'twitch' ? `https://player.twitch.tv/?channel=${encodeURIComponent(current.id)}&parent=${encodeURIComponent(window.location.hostname)}&autoplay=false` : current?.platform === 'twitch-vod' ? `https://player.twitch.tv/?video=v${encodeURIComponent(current.id)}&parent=${encodeURIComponent(window.location.hostname)}&autoplay=false` : '';
   return <section className="video-panel" aria-label={`Video panel ${panelId}`}>
     <div className="video-stage">
       {current?.platform === 'youtube' && <div className="youtube-mount" ref={playerMount} />}
-      {twitchSrc && <iframe key={currentKey} className="player-frame" src={twitchSrc} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen title={`Twitch ${current.id}`} />}
+      {['twitch', 'twitch-vod'].includes(current?.platform) && <div className="twitch-mount" ref={twitchMount} />}
       {!current && <div className="empty-state"><strong>QuadView</strong><span>Paste a YouTube or Twitch URL to begin</span></div>}
     </div>
     <div className="panel-controls">
